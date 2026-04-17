@@ -4,9 +4,94 @@ error_reporting(E_ALL);
 include 'db_connect.php';
 include 'helpers.php';
 
+// Fallback utilities: only ορίζουμε αν δεν υπάρχουν ήδη (για να μην σπάσει το site αν helpers.php έχει άλλες υλοποιήσεις)
+if (!function_exists('safe_h')) {
+    function safe_h($v) { return htmlspecialchars((string)($v ?? ''), ENT_QUOTES, 'UTF-8'); }
+}
+if (!function_exists('format_datetime_greek')) {
+    function format_datetime_greek($dt) {
+        if (!$dt) return '—';
+        $t = strtotime($dt);
+        if (!$t) return '—';
+        return date('d/m/Y H:i', $t);
+    }
+}
+if (!function_exists('trip_badge_class')) {
+    function trip_badge_class($trip) {
+        $map = [
+            'Αφίξη' => 'badge-trip-arrival',
+            'Αναχώρηση' => 'badge-trip-departure',
+            'Παραμονή' => 'badge-trip-stay',
+            'Διέλευση' => 'badge-trip-passage'
+        ];
+        return $map[$trip] ?? 'badge-trip-default';
+    }
+}
+if (!function_exists('calc_trip_type')) {
+    function calc_trip_type($status = null, $actual_arrival = null, $actual_departure = null) {
+        // Normalize status small/large / translit
+        $s = trim((string)($status ?? ''));
+        // common mappings (Greek + some English fallbacks)
+        $map = [
+            'ΑΝΑΜΕΝΟΜΕΝΟ' => 'Αφίξη',
+            'ANAMENO'     => 'Αφίξη',
+            'ΣΤΟ ΛΙΜΑΝΙ'  => 'Παραμονή',
+            'STO LIMANI'  => 'Παραμονή',
+            'IN_PORT'     => 'Παραμονή',
+            'ΑΝΑΧΩΡΗΣΕ'   => 'Αναχώρηση',
+            'ANAXORHSE'   => 'Αναχώρηση',
+            'DEPARTED'    => 'Αναχώρηση',
+            'ACTIVE'      => 'Αφίξη',
+            'ARCHIVED'    => 'Αρχείο'
+        ];
+        $s_up = mb_strtoupper($s, 'UTF-8');
+        if ($s_up !== '') {
+            foreach ($map as $k => $v) {
+                if ($s_up === mb_strtoupper($k, 'UTF-8')) return $v;
+            }
+        }
+
+        // Fallback based on timestamps
+        if (!empty($actual_departure)) return 'Αναχώρηση';
+        if (!empty($actual_arrival)) return 'Παραμονή';
+        return 'Αφίξη';
+    }
+}
+if (!function_exists('calc_duration_days')) {
+    function calc_duration_days($start = null, $end = null) {
+        if (!$start || !$end) return null;
+        $s = strtotime($start);
+        $e = strtotime($end);
+        if (!$s || !$e || $e <= $s) return null;
+        $days = floor(($e - $s) / 86400);
+        return $days > 0 ? $days : 0;
+    }
+}
+if (!function_exists('map_status_display')) {
+    function map_status_display($status = null) {
+        $s = trim((string)($status ?? ''));
+        $s_up = mb_strtoupper($s, 'UTF-8');
+        $map = [
+            'ΑΝΑΜΕΝΟΜΕΝΟ' => 'ΑΝΑΜΕΝΟΜΕΝΟ',
+            'ANAMENO'     => 'ΑΝΑΜΕΝΟΜΕΝΟ',
+            'ΣΤΟ ΛΙΜΑΝΙ'  => 'ΣΤΟ ΛΙΜΑΝΙ',
+            'IN_PORT'     => 'ΣΤΟ ΛΙΜΑΝΙ',
+            'ΑΝΑΧΩΡΗΣΕ'   => 'ΑΝΑΧΩΡΗΣΕ',
+            'DEPARTED'    => 'ΑΝΑΧΩΡΗΣΕ',
+            'ACTIVE'      => 'ΕΝΕΡΓΟ',
+            'ARCHIVED'    => 'ΑΡΧΕΙΟ'
+        ];
+        foreach ($map as $k => $v) {
+            if ($s_up === mb_strtoupper($k, 'UTF-8')) return $v;
+        }
+        return $s !== '' ? $s : 'ANAMENO';
+    }
+}
+
+// main queries
 $total = (int)($conn->query("SELECT COUNT(*) AS total FROM arrivals")->fetch_assoc()['total'] ?? 0);
 $types = (int)($conn->query("SELECT COUNT(DISTINCT cargo_type) AS types FROM arrivals")->fetch_assoc()['types'] ?? 0);
-$last = $conn->query("SELECT ship_name, arrival_time FROM arrivals ORDER BY COALESCE(arrival_time, departure_date) DESC LIMIT 1")->fetch_assoc();
+$last = $conn->query("SELECT ship_name, arrival_time FROM arrivals ORDER BY COALESCE(actual_arrival, arrival_time, actual_departure, departure_date) DESC LIMIT 1")->fetch_assoc();
 
 $badge_map = [
     'Πετρέλαιο'    => 'badge-oil',
@@ -16,7 +101,7 @@ $badge_map = [
     'Άλλο'         => 'badge-other'
 ];
 
-$result = $conn->query("SELECT * FROM arrivals ORDER BY COALESCE(arrival_time, departure_date) DESC");
+$result = $conn->query("SELECT * FROM arrivals ORDER BY COALESCE(actual_arrival, arrival_time, actual_departure, departure_date) DESC");
 ?>
 <!DOCTYPE html>
 <html lang="el">
@@ -90,33 +175,33 @@ $result = $conn->query("SELECT * FROM arrivals ORDER BY COALESCE(arrival_time, d
                 </div>
             </a>
             <div>
-                <a href="index.php" class="nav-btn active">&#127968; &#913;&#961;&#967;&#953;&#954;&#942;</a>
-                <a href="add_ship.php" class="nav-btn">&#10133; &#925;&#941;&#945; &#902;&#966;&#953;&#958;&#951;</a>
-                <a href="search.php" class="nav-btn">&#128269; &#913;&#957;&#945;&#950;&#942;&#964;&#951;&#963;&#951;</a>
-                <a href="calendar.php" class="nav-btn">&#128197; &#919;&#956;&#949;&#961;&#959;&#955;&#972;&#947;&#953;&#959;</a>
-                <a href="port_status.php" class="nav-btn">&#128506;&#65039; Port Status</a>
-                <a href="statistics.php" class="nav-btn">&#128202; &#931;&#964;&#945;&#964;&#953;&#963;&#964;&#953;&#954;&#940;</a>
+                <a href="index.php" class="nav-btn active">🏠 Αρχική</a>
+                <a href="add_ship.php" class="nav-btn">➕ Νέα Άφιξη</a>
+                <a href="search.php" class="nav-btn">🔍 Αναζήτηση</a>
+                <a href="calendar.php" class="nav-btn">📅 Ημερολόγιο</a>
+                <a href="port_status.php" class="nav-btn">🛰️ Port Status</a>
+                <a href="statistics.php" class="nav-btn">📊 Στατιστικά</a>
             </div>
         </div>
     </nav>
 
     <div class="container mt-4">
         <div class="row g-3 mb-4">
-            <div class="col-md-4"><div class="stat-card"><div class="stat-icon">&#128674;</div><div class="stat-label">&#931;&#965;&#957;&#959;&#955;&#953;&#954;&#941;&#962; &#917;&#947;&#947;&#961;&#945;&#966;&#941;&#962;</div><div class="stat-value"><?= $total ?></div></div></div>
-            <div class="col-md-4"><div class="stat-card"><div class="stat-icon">&#128230;</div><div class="stat-label">&#932;&#973;&#960;&#959;&#953; &#934;&#959;&#961;&#964;&#943;&#959;&#965;</div><div class="stat-value"><?= $types ?></div></div></div>
-            <div class="col-md-4"><div class="stat-card"><div class="stat-icon">&#128336;</div><div class="stat-label">&#932;&#949;&#955;&#949;&#965;&#964;&#945;&#943;&#945; &#922;&#943;&#957;&#951;&#963;&#951;</div><div style="font-weight:700;color:var(--gold-light);"><?= safe_h($last['ship_name'] ?? '&#8212;') ?></div><div style="font-size:.8rem;color:rgba(240,244,248,.5);"><?= format_datetime_greek($last['arrival_time'] ?? null) ?></div></div></div>
+            <div class="col-md-4"><div class="stat-card"><div class="stat-icon">🧭</div><div class="stat-label">Καταχωρημένες Αφίξεις</div><div class="stat-value"><?= $total ?></div></div></div>
+            <div class="col-md-4"><div class="stat-card"><div class="stat-icon">📦</div><div class="stat-label">Τύποι Φορτίου</div><div class="stat-value"><?= $types ?></div></div></div>
+            <div class="col-md-4"><div class="stat-card"><div class="stat-icon">🕒</div><div class="stat-label">Τελευταίο Πλοίο</div><div style="font-weight:700;color:var(--gold-light);"><?= safe_h($last['ship_name'] ?? '—') ?></div><div style="font-size:.8rem;color:rgba(240,244,248,.5);"><?= format_datetime_greek($last['arrival_time'] ?? null) ?></div></div></div>
         </div>
 
-        <?php if (isset($_GET['created'])): ?><div class="atlas-alert">&#9989; &#919; &#957;&#941;&#945; &#949;&#947;&#947;&#961;&#945;&#966;&#942; &#945;&#960;&#959;&#952;&#951;&#954;&#949;&#973;&#964;&#951;&#954;&#949;.</div><?php endif; ?>
-        <?php if (isset($_GET['updated'])): ?><div class="atlas-alert">&#9989; &#919; &#949;&#947;&#947;&#961;&#945;&#966;&#942; &#949;&#957;&#951;&#956;&#949;&#961;&#974;&#952;&#951;&#954;&#949; &#949;&#960;&#953;&#964;&#965;&#967;&#974;&#962;.</div><?php endif; ?>
-        <?php if (isset($_GET['deleted'])): ?><div class="atlas-alert">&#9989; &#919; &#949;&#947;&#947;&#961;&#945;&#966;&#942; &#948;&#953;&#945;&#947;&#961;&#940;&#966;&#951;&#954;&#949; &#949;&#960;&#953;&#964;&#965;&#967;&#974;&#962;.</div><?php endif; ?>
+        <?php if (isset($_GET['created'])): ?><div class="atlas-alert">✅ Η εγγραφή δημιουργήθηκε επιτυχώς.</div><?php endif; ?>
+        <?php if (isset($_GET['updated'])): ?><div class="atlas-alert">✅ Η εγγραφή ενημερώθηκε επιτυχώς.</div><?php endif; ?>
+        <?php if (isset($_GET['deleted'])): ?><div class="atlas-alert">✅ Η εγγραφή διαγράφηκε επιτυχώς.</div><?php endif; ?>
 
         <div class="table-wrapper">
-            <div class="section-title">&#9875; &#924;&#951;&#964;&#961;&#974;&#959; &#932;&#945;&#958;&#953;&#948;&#953;&#974;&#957;</div>
+            <div class="section-title">⚓ Καταχωρησεις Πλοίων</div>
             <table class="atlas-table">
                 <thead>
                 <tr>
-                    <th>#</th><th>&#928;&#955;&#959;&#943;&#959;</th><th>IMO</th><th>&#923;&#953;&#956;&#940;&#957;&#953;</th><th>&#934;&#959;&#961;&#964;&#943;&#959;</th><th>&#902;&#966;&#953;&#958;&#951;</th><th>&#913;&#957;&#945;&#967;&#974;&#961;&#951;&#963;&#951;</th><th>&#932;&#973;&#960;&#959;&#962;</th><th>&#916;&#953;&#940;&#961;&#954;&#949;&#953;&#945;</th><th>&#917;&#957;&#941;&#961;&#947;&#949;&#953;&#949;&#962;</th>
+                    <th>#</th><th>Πλοίο</th><th>IMO</th><th>Λιμάνι</th><th>Φορτίο</th><th>Άφιξη</th><th>Αναχώρηση</th><th>Κατάσταση</th><th>Διάρκεια</th><th>Ενέργειες</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -124,110 +209,220 @@ $result = $conn->query("SELECT * FROM arrivals ORDER BY COALESCE(arrival_time, d
                     <?php while ($row = $result->fetch_assoc()): ?>
                         <?php
                         $badge    = $badge_map[$row['cargo_type']] ?? 'badge-other';
-                        $tripType = calc_trip_type($row['arrival_time'] ?? null, $row['departure_date'] ?? null);
-                        $duration = calc_duration_days($row['arrival_time'] ?? null, $row['departure_date'] ?? null);
-                        $dur_str  = $duration !== null ? $duration . ' &#951;&#956;.' : '&#8212;';
+
+                        // Use actual timestamps if present, otherwise planned ones
+                        $display_arrival_ts  = $row['actual_arrival'] ?? $row['arrival_time'] ?? null;
+                        $display_depart_ts   = $row['actual_departure'] ?? $row['departure_date'] ?? null;
+
+                        // compute trip type using status and actual timestamps (prevents "stuck" type)
+                        $tripType = calc_trip_type($row['status'] ?? null, $row['actual_arrival'] ?? null, $row['actual_departure'] ?? null);
+
+                        // duration in days (fallback to actual timestamps then planned)
+                        $duration_days = calc_duration_days($row['actual_arrival'] ?? $row['arrival_time'] ?? null, $row['actual_departure'] ?? $row['departure_date'] ?? null);
+                        $dur_str  = $duration_days !== null ? ($duration_days . ' ημ.') : '—';
+
+                        // port display
+                        $port_raw = trim((string)($row['port'] ?? ''));
+                        $port_display = $port_raw !== '' ? $port_raw : '—';
+
+                        // notes field: prefer internal_notes if present
+                        $notes_field = $row['internal_notes'] ?? $row['notes'] ?? '';
+                        $status_display = map_status_display($row['status'] ?? null);
+                        $statusBadgeClass = trip_badge_class($tripType);
+                        if ($status_display === 'ΑΝΑΧΩΡΗΣΕ') { $statusBadgeClass = 'badge-trip-departure'; }
+                        elseif ($status_display === 'ΣΤΟ ΛΙΜΑΝΙ') { $statusBadgeClass = 'badge-trip-stay'; }
+                        elseif ($status_display === 'ΑΝΑΜΕΝΟΜΕΝΟ') { $statusBadgeClass = 'badge-trip-arrival'; }
+                        elseif ($status_display === 'ΑΡΧΕΙΟ') { $statusBadgeClass = 'badge-trip-default'; }
                         ?>
                         <tr>
                             <td style="color:rgba(240,244,248,.45);"><?= (int)$row['id'] ?></td>
                             <td style="font-weight:600;">
                                 <a href="#" class="ship-link"
-                                   data-id="<?= (int)$row['id'] ?>"
-                                   data-name="<?= safe_h($row['ship_name']) ?>"
-                                   data-imo="<?= safe_h($row['imo_number']) ?>"
-                                   data-cargo="<?= safe_h($row['cargo_type']) ?>"
-                                   data-arrival="<?= safe_h(format_datetime_greek($row['arrival_time'] ?? null)) ?>"
-                                   data-departure="<?= safe_h(format_datetime_greek($row['departure_date'] ?? null)) ?>"
-                                   data-duration="<?= $dur_str ?>"
-                                   data-port="<?= safe_h($row['port'] ?? '&#8212;') ?>"
-                                   data-status="<?= safe_h($row['status'] ?? 'ANAMENO') ?>"
-                                   data-notes="<?= safe_h($row['notes'] ?? '') ?>"
+                                   data-id="<?php echo (int)$row['id']; ?>"
+                                   data-name="<?php echo htmlspecialchars($row['ship_name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                   data-imo="<?php echo htmlspecialchars($row['imo_number'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                   data-cargo="<?php echo htmlspecialchars($row['cargo_type'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                   data-arrival="<?php echo htmlspecialchars(format_datetime_greek($display_arrival_ts), ENT_QUOTES, 'UTF-8'); ?>"
+                                   data-departure="<?php echo htmlspecialchars(format_datetime_greek($display_depart_ts), ENT_QUOTES, 'UTF-8'); ?>"
+                                   data-duration="<?php echo htmlspecialchars($dur_str, ENT_QUOTES, 'UTF-8'); ?>"
+                                   data-port="<?php echo htmlspecialchars($port_display, ENT_QUOTES, 'UTF-8'); ?>"
+                                   data-status="<?php echo htmlspecialchars($status_display, ENT_QUOTES, 'UTF-8'); ?>"
+                                   data-notes="<?php echo htmlspecialchars($notes_field, ENT_QUOTES, 'UTF-8'); ?>"
                                    style="text-decoration:none; color:inherit;">
                                     <?= safe_h($row['ship_name']) ?>
                                 </a>
                             </td>
                             <td style="color:rgba(240,244,248,.6)"><?= safe_h($row['imo_number']) ?></td>
-                            <td><?= safe_h($row['port'] ?? '&#8212;') ?></td>
+                            <td><?= safe_h($port_display) ?></td>
                             <td><span class="cargo-badge <?= $badge ?>"><?= safe_h($row['cargo_type']) ?></span></td>
-                            <td><?= format_datetime_greek($row['arrival_time'] ?? null) ?></td>
-                            <td><?= format_datetime_greek($row['departure_date'] ?? null) ?></td>
-                            <td><span class="trip-badge <?= trip_badge_class($tripType) ?>"><?= safe_h($tripType) ?></span></td>
-                            <td><?= $dur_str ?></td>
+                            <td><?= format_datetime_greek($display_arrival_ts) ?></td>
+                            <td><?= format_datetime_greek($display_depart_ts) ?></td>
+                            <td><span class="trip-badge <?= $statusBadgeClass ?>"><?= safe_h($status_display) ?></span></td>
+                            <td><?= safe_h($dur_str) ?></td>
                             <td>
-                                <a class="btn-edit" href="edit_ship.php?id=<?= (int)$row['id'] ?>">&#9999;&#65039; Edit</a>
-                                <a class="btn-pda" href="pda.php?id=<?= (int)$row['id'] ?>">&#128196; PDA</a>
-                                <a class="btn-delete" href="delete.php?id=<?= (int)$row['id'] ?>" onclick="return confirm('Delete?')">&#128465;&#65039; Del</a>
+                                <a class="btn-edit" href="edit_ship.php?id=<?= (int)$row['id'] ?>">✏️ Edit</a>
+                                <a class="btn-pda" href="pda.php?id=<?= (int)$row['id'] ?>">📄 PDA</a>
+                                <a class="btn-delete" href="delete.php?id=<?= (int)$row['id'] ?>" onclick="return confirm('Delete?')">🗑️ Del</a>
                             </td>
                         </tr>
                     <?php endwhile; ?>
                 <?php else: ?>
-                    <tr><td colspan="10" style="text-align:center;color:rgba(240,244,248,.45);padding:34px;">&#916;&#949;&#957; &#965;&#960;&#940;&#961;&#967;&#959;&#965;&#957; &#954;&#945;&#964;&#945;&#967;&#969;&#961;&#951;&#956;&#941;&#957;&#945; &#964;&#945;&#958;&#943;&#948;&#953;&#945;.</td></tr>
+                    <tr><td colspan="10" style="text-align:center;color:rgba(240,244,248,.45);padding:34px;">Δεν υπάρχουν καταχωρημένα ταξίδια.</td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>
         </div>
     </div>
 
-    <footer class="atlas-footer"><span>ATLAS GROUP</span> &middot; Port Management System &middot; &#928;&#945;&#957;&#949;&#960;&#953;&#963;&#964;&#942;&#956;&#953;&#959; &#916;&#965;&#964;&#953;&#954;&#942;&#962; &#913;&#964;&#964;&#953;&#954;&#942;&#962; &copy; 2026</footer>
+    <footer class="atlas-footer"><span>ATLAS GROUP</span> · Port Management System · Πανεπιστήμιο Δυτικής Αττικής © 2026</footer>
 </div>
 
+<!-- Modal -->
 <div id="shipModal" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,.6); backdrop-filter:blur(4px);">
     <div id="shipPanel" style="position:absolute; right:0; top:0; height:100%; width:420px; max-width:95vw;
          background:linear-gradient(160deg,#0d1f35,#0a1628); border-left:1px solid rgba(201,168,76,.3);
          padding:30px 28px; overflow-y:auto; box-shadow:-10px 0 40px rgba(0,0,0,.5);">
-        <button onclick="closeModal()" style="position:absolute;top:16px;right:18px;background:none;border:none;color:rgba(240,244,248,.5);font-size:1.4rem;cursor:pointer;">&#10005;</button>
+        <button onclick="closeModal()" style="position:absolute;top:16px;right:18px;background:none;border:none;color:rgba(240,244,248,.5);font-size:1.4rem;cursor:pointer;">✕</button>
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-            <span style="font-size:1.5rem;">&#128674;</span>
+            <span style="font-size:1.5rem;">🚢</span>
             <div id="m-name" style="font-family:'Cinzel',serif;font-size:1.3rem;color:var(--gold);letter-spacing:2px;"></div>
         </div>
         <div style="font-size:.65rem;letter-spacing:3px;color:rgba(240,244,248,.4);text-transform:uppercase;margin-bottom:24px;">VESSEL DETAILS</div>
         <div style="display:flex;flex-direction:column;gap:0;">
             <div class="m-row"><span class="m-label">IMO NUMBER</span><span id="m-imo" class="m-val"></span></div>
-            <div class="m-row"><span class="m-label">&#932;&#933;&#928;&#927;&#931; &#934;&#927;&#929;&#932;&#921;&#927;&#933;</span><span id="m-cargo" class="m-val"></span></div>
-            <div class="m-row"><span class="m-label">&#9875; &#913;&#934;&#921;&#926;&#919;</span><span id="m-arrival" class="m-val"></span></div>
-            <div class="m-row"><span class="m-label">&#913;&#925;&#913;&#935;&#937;&#929;&#919;&#931;&#919;</span><span id="m-departure" class="m-val"></span></div>
-            <div class="m-row"><span class="m-label">&#928;&#913;&#929;&#913;&#924;&#927;&#925;&#919;</span><span id="m-duration" class="m-val"></span></div>
-            <div class="m-row"><span class="m-label">&#923;&#921;&#924;&#913;&#925;&#921;</span><span id="m-port" class="m-val"></span></div>
+            <div class="m-row"><span class="m-label">ΤΥΠΟΣ ΦΟΡΤΙΟΥ</span><span id="m-cargo" class="m-val"></span></div>
+            <div class="m-row"><span class="m-label">⚓ ΑΦΙΞΗ</span><span id="m-arrival" class="m-val"></span></div>
+            <div class="m-row"><span class="m-label">ΑΝΑΧΩΡΗΣΗ</span><span id="m-departure" class="m-val"></span></div>
+            <div class="m-row"><span class="m-label">ΠΑΡΑΜΟΝΗ</span><span id="m-duration" class="m-val"></span></div>
+            <div class="m-row"><span class="m-label">ΛΙΜΑΝΙ</span><span id="m-port" class="m-val"></span></div>
             <div class="m-row">
                 <span class="m-label">STATUS</span>
                 <span id="m-status" style="border:1px solid var(--gold);color:var(--gold);padding:3px 12px;border-radius:20px;font-size:.75rem;font-weight:700;letter-spacing:1px;"></span>
             </div>
         </div>
         <div style="margin-top:24px;border-top:1px solid rgba(201,168,76,.15);padding-top:16px;">
-            <div style="font-size:.65rem;letter-spacing:2px;color:rgba(240,244,248,.4);margin-bottom:8px;">&#931;&#935;&#927;&#923;&#921;&#913;</div>
+            <div style="font-size:.65rem;letter-spacing:2px;color:rgba(240,244,248,.4);margin-bottom:8px;">Σημειώσεις</div>
             <div id="m-notes" style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:12px;font-size:.85rem;color:rgba(240,244,248,.6);"></div>
         </div>
         <div style="margin-top:20px;display:flex;gap:8px;">
-            <a id="m-edit-btn" href="#" class="btn-edit" style="flex:1;text-align:center;padding:10px;">&#9999;&#65039; Edit</a>
-            <a id="m-pda-btn" href="#" class="btn-pda" style="flex:1;text-align:center;padding:10px;">&#128196; PDA</a>
+            <a id="m-edit-btn" href="#" class="btn-edit" style="flex:1;text-align:center;padding:10px;">✏️ Edit</a>
+            <a id="m-pda-btn" href="#" class="btn-pda" style="flex:1;text-align:center;padding:10px;">📄 PDA</a>
         </div>
     </div>
 </div>
 
 <script>
-document.querySelectorAll('.ship-link').forEach(link => {
-    link.addEventListener('click', function(e) {
-        e.preventDefault();
-        const d = this.dataset;
-        document.getElementById('m-name').textContent      = d.name;
-        document.getElementById('m-imo').textContent       = d.imo;
-        document.getElementById('m-cargo').textContent     = d.cargo;
-        document.getElementById('m-arrival').textContent   = d.arrival;
-        document.getElementById('m-departure').textContent = d.departure;
-        document.getElementById('m-duration').textContent  = d.duration;
-        document.getElementById('m-port').textContent      = d.port;
-        document.getElementById('m-status').textContent    = d.status;
-        document.getElementById('m-notes').textContent     = d.notes;
-        document.getElementById('m-edit-btn').href         = 'edit_ship.php?id=' + d.id;
-        document.getElementById('m-pda-btn').href          = 'pda.php?id=' + d.id;
-        document.getElementById('shipModal').style.display = 'block';
-    });
+function setModalText(id, value, fallback = '—') {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const clean = (value || '').toString().trim();
+    el.textContent = clean !== '' ? clean : fallback;
+}
+
+// when clicking a ship row link, populate modal
+document.addEventListener('click', function(e) {
+    const link = e.target.closest && e.target.closest('.ship-link');
+    if (!link) return;
+
+    e.preventDefault();
+
+    setModalText('m-name', link.getAttribute('data-name'));
+    setModalText('m-imo', link.getAttribute('data-imo'));
+    setModalText('m-cargo', link.getAttribute('data-cargo'));
+    setModalText('m-arrival', link.getAttribute('data-arrival'));
+    setModalText('m-departure', link.getAttribute('data-departure'));
+    setModalText('m-duration', link.getAttribute('data-duration'));
+    setModalText('m-port', link.getAttribute('data-port'));
+    setModalText('m-status', link.getAttribute('data-status'), 'ANAMENO');
+
+    const notes = (link.getAttribute('data-notes') || '').trim();
+    document.getElementById('m-notes').textContent = notes;
+
+    const id = link.getAttribute('data-id') || '';
+    document.getElementById('m-edit-btn').href = 'edit_ship.php?id=' + encodeURIComponent(id);
+    document.getElementById('m-pda-btn').href  = 'pda.php?id=' + encodeURIComponent(id);
+
+    document.getElementById('shipModal').style.display = 'block';
 });
+
 function closeModal() {
     document.getElementById('shipModal').style.display = 'none';
 }
+
 document.getElementById('shipModal').addEventListener('click', function(e) {
     if (e.target === this) closeModal();
+});
+
+// helper to format server datetime (YYYY-MM-DD HH:MM:SS) to local greek format
+function formatDTLocal(iso) {
+    if (!iso) return '—';
+    const s = iso.replace(' ', 'T');
+    const d = new Date(s);
+    if (isNaN(d)) return iso;
+    return d.toLocaleDateString('el-GR') + ' ' + d.toLocaleTimeString('el-GR',{hour:'2-digit',minute:'2-digit'});
+}
+
+// apply update to the row and modal
+function applyUpdateToRow(id, data) {
+    const rowLink = document.querySelector('.ship-link[data-id="' + id + '"]');
+    if (!rowLink) return;
+
+    if (data.actual_arrival) {
+        const a = formatDTLocal(data.actual_arrival);
+        rowLink.setAttribute('data-arrival', a);
+        const tr = rowLink.closest('tr');
+        if (tr && tr.cells[5]) tr.cells[5].textContent = a; // Άφιξη
+    }
+    if (data.actual_departure) {
+        const d = formatDTLocal(data.actual_departure);
+        rowLink.setAttribute('data-departure', d);
+        const tr = rowLink.closest('tr');
+        if (tr && tr.cells[6]) tr.cells[6].textContent = d; // Αναχώρηση
+    }
+    if (data.status) {
+        const human = (data.status === 'ΣΤΟ ΛΙΜΑΝΙ') ? 'Παραμονή' : (data.status === 'ΑΝΑΧΩΡΗΣΕ' ? 'Αναχώρηση' : data.status);
+        rowLink.setAttribute('data-status', human);
+        const tr = rowLink.closest('tr');
+        if (tr && tr.cells[7]) {
+            const badgeEl = tr.cells[7].querySelector('.trip-badge');
+            if (badgeEl) {
+                badgeEl.textContent = human;
+                badgeEl.className = 'trip-badge ' + (human === 'Παραμονή' ? 'badge-trip-stay' : (human === 'Αναχώρηση' ? 'badge-trip-departure' : 'badge-trip-default'));
+            }
+        }
+        const modalEditHref = document.getElementById('m-edit-btn')?.href || '';
+        if (modalEditHref.indexOf('id=' + encodeURIComponent(id)) !== -1) {
+            document.getElementById('m-status').textContent = human;
+        }
+    }
+}
+
+// perform update + broadcast to other tabs
+function updateStatusAndBroadcast(id, action) {
+    if (!confirm(action === 'arrived' ? 'Μαρκάρω ως άφιξη;' : 'Μαρκάρω ως αναχώρηση;')) return;
+    fetch('update_status.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'id=' + encodeURIComponent(id) + '&action=' + encodeURIComponent(action)
+    }).then(r => r.json()).then(data => {
+        if (!data.success) { alert('Σφάλμα: ' + (data.error || 'update failed')); return; }
+        applyUpdateToRow(id, data);
+        const msg = { id: id, status: data.status || null, actual_arrival: data.actual_arrival || null, actual_departure: data.actual_departure || null, ts: Date.now() };
+        try { localStorage.setItem('ship_update_' + id, JSON.stringify(msg)); } catch(e) { console.warn('broadcast failed', e); }
+    }).catch(err => { console.error(err); alert('Network error'); });
+}
+
+// listen for broadcasts from other tabs
+window.addEventListener('storage', function(e) {
+    if (!e.key) return;
+    if (!e.key.startsWith('ship_update_')) return;
+    try {
+        const data = JSON.parse(e.newValue);
+        if (!data || !data.id) return;
+        applyUpdateToRow(data.id, data);
+    } catch (err) {
+        console.error('storage parse error', err);
+    }
 });
 </script>
 </body>
