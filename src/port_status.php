@@ -163,7 +163,7 @@ $departed  = $conn->query("SELECT * FROM arrivals WHERE status='ΑΝΑΧΩΡΗΣ
             <a href="port_status.php" class="date-nav-today">&#128197; Σήμερα</a>
             <?php endif; ?>
             <div class="date-input-wrap">
-                <input type="date" value="<​?= $selected_date ?>" onchange="window.location='port_status.php?date='+this.value">
+                <input type="date" value="<?= $selected_date ?>" onchange="window.location='port_status.php?date='+this.value">
             </div>
         </div>
 
@@ -181,15 +181,15 @@ $departed  = $conn->query("SELECT * FROM arrivals WHERE status='ΑΝΑΧΩΡΗΣ
                             <div class="empty-state">Δεν υπάρχουν<br>αναμενόμενες αφίξεις</div>
                         <?php endif; ?>
                         <?php while ($s = $expected->fetch_assoc()): ?>
-                        <div class="ship-card expected-card"
-                             onclick="openModal(<?= $s['id'] ?>,'<?= addslashes(htmlspecialchars($s['ship_name'])) ?>','<?= addslashes(htmlspecialchars($s['imo_number'] ?? '—')) ?>','<?= addslashes(htmlspecialchars($s['cargo_type'])) ?>','<?= $s['arrival_time'] ?>','<?= $s['actual_arrival'] ?? '' ?>','<?= $s['actual_departure'] ?? '' ?>','<?= addslashes(htmlspecialchars($s['internal_notes'] ?? '')) ?>','<?= $s['status'] ?>')">
+                        <div id="card-<?= (int)$s['id'] ?>" class="ship-card expected-card"
+                             onclick="openModal(<?= (int)$s['id'] ?>,'<?= addslashes(htmlspecialchars($s['ship_name'])) ?>','<?= addslashes(htmlspecialchars($s['imo_number'] ?? '—')) ?>','<?= addslashes(htmlspecialchars($s['cargo_type'])) ?>','<?= $s['arrival_time'] ?>','<?= $s['actual_arrival'] ?? '' ?>','<?= $s['actual_departure'] ?? '' ?>','<?= addslashes(htmlspecialchars($s['internal_notes'] ?? '')) ?>','<?= addslashes(htmlspecialchars($s['status'] ?? 'ΑΝΑΜΕΝΟΜΕΝΟ')) ?>')">
                             <div class="ship-name">🚢 <?= htmlspecialchars($s['ship_name']) ?></div>
                             <div class="ship-imo">IMO: <?= htmlspecialchars($s['imo_number'] ?? '—') ?></div>
                             <div class="ship-meta">
                                 <span class="meta-tag cargo"><?= htmlspecialchars($s['cargo_type']) ?></span>
                                 <span class="meta-tag time">ETA: <?= date('d/m H:i', strtotime($s['arrival_time'])) ?></span>
                             </div>
-                            <button class="btn-arrived" onclick="event.stopPropagation(); updateStatus(<?= $s['id'] ?>, 'arrived')">
+                            <button class="btn-arrived" onclick="event.stopPropagation(); updateStatus(<?= (int)$s['id'] ?>, 'arrived')">
                                 ✅ ΕΦΤΑΣΕ — ΑΓΚΥΡΟΒΟΛΗΣΕ
                             </button>
                             <?php if (!empty($s['internal_notes'])): ?>
@@ -216,8 +216,8 @@ $departed  = $conn->query("SELECT * FROM arrivals WHERE status='ΑΝΑΧΩΡΗΣ
                             <div class="empty-state">Κανένα πλοίο<br>αγκυροβολημένο</div>
                         <?php endif; ?>
                         <?php while ($s = $inport->fetch_assoc()): ?>
-                        <div class="ship-card inport-card"
-                             onclick="openModal(<?= $s['id'] ?>,'<?= addslashes(htmlspecialchars($s['ship_name'])) ?>','<?= addslashes(htmlspecialchars($s['imo_number'] ?? '—')) ?>','<?= addslashes(htmlspecialchars($s['cargo_type'])) ?>','<?= $s['arrival_time'] ?>','<?= $s['actual_arrival'] ?? '' ?>','<?= $s['actual_departure'] ?? '' ?>','<?= addslashes(htmlspecialchars($s['internal_notes'] ?? '')) ?>','<?= $s['status'] ?>')">
+                        <div id="card-<?= (int)$s['id'] ?>" class="ship-card inport-card"
+                             onclick="openModal(<?= (int)$s['id'] ?>,'<?= addslashes(htmlspecialchars($s['ship_name'])) ?>','<?= addslashes(htmlspecialchars($s['imo_number'] ?? '—')) ?>','<?= addslashes(htmlspecialchars($s['cargo_type'])) ?>','<?= $s['arrival_time'] ?>','<?= $s['actual_arrival'] ?? '' ?>','<?= $s['actual_departure'] ?? '' ?>','<?= addslashes(htmlspecialchars($s['internal_notes'] ?? '')) ?>','<?= addslashes(htmlspecialchars($s['status'] ?? 'ΣΤΟ ΛΙΜΑΝΙ')) ?>')">
                             <div class="ship-name">🚢 <?= htmlspecialchars($s['ship_name']) ?></div>
                             <div class="ship-imo">IMO: <?= htmlspecialchars($s['imo_number'] ?? '—') ?></div>
                             <div class="ship-meta">
@@ -232,7 +232,7 @@ $departed  = $conn->query("SELECT * FROM arrivals WHERE status='ΑΝΑΧΩΡΗΣ
                                 echo "<div style='font-size:0.68rem; color:rgba(240,244,248,0.35); margin-bottom:4px;'>⏱️ Παραμονή: {$hrs}ω {$mins}λ</div>";
                             }
                             ?>
-                            <button class="btn-departed" onclick="event.stopPropagation(); updateStatus(<?= $s['id'] ?>, 'departed')">
+                            <button class="btn-departed" onclick="event.stopPropagation(); updateStatus(<?= (int)$s['id'] ?>, 'departed')">
                                 🚢 ΑΝΑΧΩΡΗΣΕ — ΕΦΥΓΕ
                             </button>
                             <?php if (!empty($s['internal_notes'])): ?>
@@ -259,8 +259,8 @@ $departed  = $conn->query("SELECT * FROM arrivals WHERE status='ΑΝΑΧΩΡΗΣ
                             <div class="empty-state">Καμία αναχώρηση<br>σήμερα</div>
                         <?php endif; ?>
                         <?php while ($s = $departed->fetch_assoc()): ?>
-                        <div class="ship-card departed-card"
-                             onclick="openModal(<?= $s['id'] ?>,'<?= addslashes(htmlspecialchars($s['ship_name'])) ?>','<?= addslashes(htmlspecialchars($s['imo_number'] ?? '—')) ?>','<?= addslashes(htmlspecialchars($s['cargo_type'])) ?>','<?= $s['arrival_time'] ?>','<?= $s['actual_arrival'] ?? '' ?>','<?= $s['actual_departure'] ?? '' ?>','<?= addslashes(htmlspecialchars($s['internal_notes'] ?? '')) ?>','<?= $s['status'] ?>')">
+                        <div id="card-<?= (int)$s['id'] ?>" class="ship-card departed-card"
+                             onclick="openModal(<?= (int)$s['id'] ?>,'<?= addslashes(htmlspecialchars($s['ship_name'])) ?>','<?= addslashes(htmlspecialchars($s['imo_number'] ?? '—')) ?>','<?= addslashes(htmlspecialchars($s['cargo_type'])) ?>','<?= $s['arrival_time'] ?>','<?= $s['actual_arrival'] ?? '' ?>','<?= $s['actual_departure'] ?? '' ?>','<?= addslashes(htmlspecialchars($s['internal_notes'] ?? '')) ?>','<?= addslashes(htmlspecialchars($s['status'] ?? 'ΑΝΑΧΩΡΗΣΕ')) ?>')">
                             <div class="ship-name">🚢 <?= htmlspecialchars($s['ship_name']) ?></div>
                             <div class="ship-imo">IMO: <?= htmlspecialchars($s['imo_number'] ?? '—') ?></div>
                             <div class="ship-meta">
