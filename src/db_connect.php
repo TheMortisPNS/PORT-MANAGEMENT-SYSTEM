@@ -3,10 +3,10 @@
 date_default_timezone_set('Europe/Athens');
 
 // --- Ρύθμισε τα παρακάτω με τα στοιχεία που σου έδωσε το InfinityFree ---
-$servername = "sql201.infinityfree.com";    // π.χ. sql123.infinityfree.com
-$username   = "if0_41687406";               // όνομα χρήστη MySQL
-$password   = "43AB21CD";                   // κωδικός MySQL
-$dbname     = "if0_41687406_portdb";        // όνομα βάσης
+$servername = "your_host";    // π.χ. sql123.infinityfree.com
+$username   = "your_username";               // όνομα χρήστη MySQL
+$password   = "your_password";                   // κωδικός MySQL
+$dbname     = "your_database";        // όνομα βάσης
 
 // --- Σύνδεση ---
 $conn = new mysqli($servername, $username, $password, $dbname);
