@@ -18,8 +18,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $imo_number     = trim($_POST['imo_number'] ?? '');
     $cargo_type     = trim($_POST['cargo_type'] ?? 'Άλλο');
     $port           = trim($_POST['port'] ?? '');
-    $arrival_time   = normalize_datetime_local($_POST['arrival_time'] ?? null);
-    $departure_date = normalize_datetime_local($_POST['departure_date'] ?? null);
+    $arrival_time   = $ship['arrival_time'] ?? null;
+    $departure_date = $ship['departure_date'] ?? null;
     $status         = trim($_POST['status'] ?? 'Active');
 
     $port_charges = parse_money($_POST['port_charges'] ?? 0);
@@ -166,12 +166,12 @@ $types = ['Containers', 'Πετρέλαιο', 'Χύδην Φορτίο', 'Επι
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">&#919;&#956;&#949;&#961;&#959;&#956;&#951;&#957;&#943;&#945; / &#8199;&#937;&#961;&#945; &#902;&#966;&#953;&#958;&#951;&#962;</label>
-                        <input type="datetime-local" name="arrival_time" class="form-control" required
+                        <input type="datetime-local" name="arrival_time" class="form-control" required readonly
                                value="<?= safe_h(format_datetime_local_input($ship['arrival_time'] ?? null)) ?>">
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">&#919;&#956;&#949;&#961;&#959;&#956;&#951;&#957;&#943;&#945; / &#8199;&#937;&#961;&#945; &#913;&#957;&#945;&#967;&#974;&#961;&#951;&#963;&#951;&#962;</label>
-                        <input type="datetime-local" name="departure_date" class="form-control"
+                        <input type="datetime-local" name="departure_date" class="form-control" readonly
                                value="<?= safe_h(format_datetime_local_input($ship['departure_date'] ?? null)) ?>">
                     </div>
                 </div>
